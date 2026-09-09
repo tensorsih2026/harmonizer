@@ -1,0 +1,13 @@
+# Floors, not verified pins. Run `pip freeze > requirements.lock.txt` after your
+# first green build and deploy from that — a hackathon does not want a
+# transitive dependency changing under it the night before judging.
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch>=2.2,<3            # CPU wheel from the index above; the default is ~2GB larger
+sentence-transformers>=3.0,<6
+fastapi>=0.110,<1
+uvicorn[standard]>=0.29,<1
+python-multipart>=0.0.9  # required by FastAPI for multipart file uploads
+pandas>=2.0,<3
+openpyxl>=3.1            # .xlsx / .xlsm reader used by pandas.read_excel
