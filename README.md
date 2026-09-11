@@ -54,40 +54,56 @@ python tests/make_sample.py 5000 exports/ --per-unit --messy  # one file per CPS
 Dev-only: nothing in `app.py` or `harmonizer.py` imports from `tests/`.
 
 ---
+## Deploy to Google Cloud Run
 
-## Deploy to Hugging Face Spaces
+Cloud Run is the right fit for this stack — persistent container, no cold-start
+size limits, and it builds straight from the Dockerfile above.
 
-Free CPU basic is **2 vCPU / 16 GB RAM** — the right size for this stack.
-Render's free tier is 512 MB and will OOM the moment torch loads the model.
+1. Create or open a Google Cloud project with billing enabled, then open
+   **Cloud Shell** (the `>_` icon top-right of the console).
+2. Upload this folder to Cloud Shell (drag-and-drop the zip via the Cloud Shell
+   **⋮ menu → Upload**, then unzip it), or `git clone` this repo directly.
+3. `cd` into the folder that contains this `Dockerfile` — deploying from the
+   wrong directory is the most common failure here; watch the build log for
+   the line **"Building using Dockerfile"**, not "Buildpacks".
+4. Deploy:
 
-1. Create a Space: <https://huggingface.co/new-space> → SDK **Docker** → blank template.
-2. Push this folder to the Space repo:
+```bash
+   gcloud run deploy harmonizer \
+     --source . \
+     --region asia-south1 \
+     --allow-unauthenticated \
+     --memory 4Gi \
+     --cpu 2 \
+     --port 7860 \
+     --timeout 300 \
+     --min-instances 1 \
+     --set-env-vars GEMINI_API_KEY=your_key_here
+```
 
-   ```bash
-   git init
-   git remote add origin https://huggingface.co/spaces/<user>/<space-name>
-   git add .
-   git commit -m "Material Code Harmonizer"
-   git push -u origin main
-   ```
+   `--min-instances 1` keeps one instance warm so there's no cold-start delay
+   during a demo. Omit `--set-env-vars` (or the whole flag) to run without the
+   optional AI pass.
 
-   The `README.md` frontmatter above is what tells the Space to build the
-   Dockerfile and expose port 7860 — don't delete it.
-3. First build takes 5–10 minutes (torch is large, and the model is baked in
-   so cold starts stay fast). Watch the **Logs** tab.
-4. Your URL is `https://<user>-<space-name>.hf.space`. Hand that to judges.
+5. First build takes several minutes — Cloud Build compiles the Dockerfile,
+   installs `torch` + `sentence-transformers`, and bakes the embedding model
+   into the image so the first real request doesn't pay for it.
+6. If the deploy fails on a permissions error (`storage.objectViewer` or
+   `artifactregistry.writer`), grant the missing role to the project's default
+   compute service account:
 
-Free Spaces sleep after prolonged inactivity. **Open yours ten minutes before
-you present** and it will be warm.
+```bash
+   gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+     --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+     --role="roles/artifactregistry.writer"
+```
 
-### Alternatives
+7. On success, `gcloud` prints a `*.run.app` URL — that's the live, publicly
+   reachable app.
 
-| Host | Verdict |
-|---|---|
-| **HF Spaces** (free CPU basic) | 2 vCPU / 16 GB. Recommended. |
-| **Railway / Fly.io** | Works if you provision ≥ 2 GB RAM. Paid. |
-| **Render free** | 512 MB — will not fit. Don't. |
-| **Laptop + a tunnel** | Zero deploy risk, dies with your laptop. Fine as a backup. |
+To redeploy after a change, re-run the same `gcloud run deploy` command from
+inside the folder — Cloud Run builds a new revision and shifts traffic to it
+automatically.
 
 ### Splitting frontend and backend
 
